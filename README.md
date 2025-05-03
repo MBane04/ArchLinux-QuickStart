@@ -89,6 +89,19 @@ Check the internet connection
 ping -c 5 archlinux.org 
 ```
 
+If not connected use these for wifi
+```Zsh
+iwctl
+
+# view available networks
+staton wlan0 get-networks
+
+# connect to a network
+station wlan0 connect NetworkName
+
+# you'll then be prompted to enter your password, do so and then run the ping command above to verify connection
+```
+
 <br>
 
 Check the system clock
@@ -120,55 +133,57 @@ I will make 2 partitions:
 <br>
 
 ```Zsh
-# Check the drive name. Mine is /dev/nvme0n1
-# If you have an hdd is something like sdax
+# List all available drives
 fdisk -l
 
-# Now you can either go and partition your disk with fdisk and follow the steps below,
-# or if you want to do things yourself and make it easier, use cfdisk ( an fdisk TUI wrapper ) which is
-# much more user friendly. A reddit user suggested me this and it's indeed very intuitive to use.
-# If you choose cfdisk you will have to invoke it the same way as I did with fdisk below, but
-# you don't need to follow my commands blindly as with fdisk below, just navigate the UI with the arrows
-# and press enter to get inside menus, remember to write changes before quitting.
-
-# Invoke fdisk to partition
+# Invoke fdisk to partition you want to install Arch on
 fdisk /dev/nvme0n1
 
-# Now press the following commands, when i write ENTER press enter
+#create a partition table
 g
-ENTER
+
+#create a new ppartition
 n
-ENTER
-ENTER
-ENTER
+
+#default partition
+Press Enter or specify 1
+
+#First Sector: default is good
+Press Enter
+
+#Last Sector: add 512MB for the EFI partition
 +512M
-ENTER
+
+#if promted to remove signature, say yes for both partitions since we'll reformat later
+
+#next we she type to 1 so the system knows this is the EFI partition
 t
-ENTER
-ENTER
+
+#then enter 1 for EFI
 1
-ENTER
+
+
+#create the second partition which will be where the filesystem is stored
 n
-ENTER
-ENTER
-ENTER # If you don't want to use all the space then select the size by writing +XG ( eg: to make a 10GB partition +10G )
+
+# Just skip through all prompts until you can enter a command, this will set the rest of the drive to be the file sys partition
+# If you don't want to use all the space then select the size by writing +XG ( eg: to make a 10GB partition +10G )
+
+# Now check if you got the partitions right, you should see that the EFI partition is 512M and the other is the rest, unless changed
 p
-ENTER # Now check if you got the partitions right
 
 # If so write the changes
 w
-ENTER
 
 # If not you can quit without saving and redo from the beginning
 q
-ENTER
 ```
 
 <br>
 
 ## Disk formatting  
 
-For the file system I've chosen [**BTRFS**](https://wiki.archlinux.org/title/Btrfs) which has evolved quite a lot in the recent years. It is most known for its **Copy on Write** feature which enables it to make system snapshots in a blink of a an eye and to save a lot of disk space, which can be even saved to a greater extent by enabling built\-in **compression**. Also it lets the user create **subvolumes** which can be individually snapshotted.
+For the file system I've chosen [**BTRFS**](https://wiki.archlinux.org/title/Btrfs). It is most known for its **Copy on Write** feature which enables it to make system snapshots in a blink of a an eye and to save a lot of disk space, which can be even saved to a greater extent by enabling built\-in **compression**. Also it lets the user create **subvolumes** which can be individually snapshotted.
 
 ```Zsh
 # Find the efi partition with fdisk -l or lsblk. For me it's /dev/nvme0n1p1 and format it.
@@ -185,7 +200,7 @@ mount /dev/nvme0n1p2 /mnt
 
 ## Disk mounting
 
-I will lay down the subvolumes on a **flat** layout, which is overall superior in my opinion and less constrained than a **nested** one. What's the difference ? If you're interested [this section of the old sysadmin guide](https://archive.kernel.org/oldwiki/btrfs.wiki.kernel.org/index.php/SysadminGuide.html#Layout) explains it.
+I will lay down the subvolumes on a **flat** layout
 
 ```Zsh
 # Create the subvolumes, in my case I choose to make a subvolume for / and one for /home. Subvolumes are identified by prepending @
@@ -199,18 +214,18 @@ umount /mnt
 
 <br>
 
-For this guide I'll compress the btrfs subvolumes with **Zstd**, which has proven to be [a good algorithm among the choices](https://www.phoronix.com/review/btrfs-zstd-compress)  
+Mount the subvolumes  
 
 ```Zsh
 # Mount the root and home subvolume. If you don't want compression just remove the compress option.
-mount -o compress=zstd,subvol=@ /dev/nvme0n1p2 /mnt
+mount -o subvol=@ /dev/nvme0n1p2 /mnt
 mkdir -p /mnt/home
-mount -o compress=zstd,subvol=@home /dev/nvme0n1p2 /mnt/home
+mount -o subvol=@home /dev/nvme0n1p2 /mnt/home
 ```
 
 <br>
 
-Now we have to mount the efi partition. In general there are 2 main mountpoints to use: `/efi` or `/boot` but in this configuration i am **forced** to use `/efi`, because by choosing `/boot` we could experience a **system crash** when trying to restore `@` _\( the root subvolume \)_ to a previous state after kernel updates. This happens because `/boot` files such as the kernel won't reside on `@` but on the efi partition and hence they can't be saved when snapshotting `@`. Also this choice grants separation of concerns and also is good if one wants to encrypt `/boot`, since you can't encrypt efi files. Learn more [here](https://wiki.archlinux.org/title/EFI_system_partition#Typical_mount_points)
+Now we have to mount the efi partition. In general there are 2 main mountpoints to use: `/efi` or `/boot` but in this configuration i am **forced** to use `/efi`, because by choosing `/boot` we could experience a **system crash** when trying to restore `@` _\( the root subvolume \)_ to a previous state after kernel updates. This happens because `/boot` files such as the kernel won't reside on `@` but on the efi partition and hence they can't be saved when snapshotting `@`. Also this choice grants separation of concerns and also is good if one wants to encrypt `/boot`, since you can't encrypt efi files.
 
 ```Zsh
 mkdir -p /mnt/efi
@@ -233,7 +248,7 @@ mount /dev/nvme0n1p1 /mnt/efi
 # "inotify-tools" used by grub btrfsd deamon to automatically spot new snapshots and update grub entries
 # "timeshift" a GUI app to easily create,plan and restore snapshots using BTRFS capabilities
 # "amd-ucode" microcode updates for the cpu. If you have an intel one use "intel-ucode"
-# "vim" my goto editor, if unfamiliar use nano
+# "nano" the text editor
 # "networkmanager" to manage Internet connections both wired and wireless ( it also has an applet package network-manager-applet )
 # "pipewire pipewire-alsa pipewire-pulse pipewire-jack" for the new audio framework replacing pulse and jack. 
 # "wireplumber" the pipewire session manager.
@@ -244,7 +259,7 @@ mount /dev/nvme0n1p1 /mnt/efi
 # "openssh" to use ssh and manage keys
 # "man" for manual pages
 # "sudo" to run commands as other users
-pacstrap -K /mnt base base-devel linux linux-firmware git btrfs-progs grub efibootmgr grub-btrfs inotify-tools timeshift vim networkmanager pipewire pipewire-alsa pipewire-pulse pipewire-jack wireplumber reflector zsh zsh-completions zsh-autosuggestions openssh man sudo
+pacstrap -K /mnt base base-devel linux linux-firmware git btrfs-progs grub efibootmgr grub-btrfs inotify-tools timeshift nano networkmanager pipewire pipewire-alsa pipewire-pulse pipewire-jack wireplumber reflector zsh zsh-completions zsh-autosuggestions openssh man sudo
 ```
 
 <br>
@@ -273,8 +288,8 @@ arch-chroot /mnt
 ## Set up the time zone
 
 ```Zsh
-# In our new system we have to set up the local time zone, find your one in /usr/share/zoneinfo mine is /usr/share/zoneinfo/Europe/Rome and create a symbolic link to /etc/localtime
-ln -sf /usr/share/zoneinfo/Europe/Rome /etc/localtime
+# In our new system we have to set up the local time zone, find your one in /usr/share/zoneinfo mine is /usr/share/zoneinfo/US/Central and create a symbolic link to /etc/localtime
+ln -sf /usr/share/zoneinfo/US/Central /etc/localtime
 
 # Now sync the system time to the hardware clock
 hwclock --systohc
@@ -287,8 +302,8 @@ hwclock --systohc
 Edit `/etc/locale.gen` and uncomment the entries for your locales. Each entry represent a language and its formats for time, date, currency and other country related settings. By uncommenting we will mark the entry to be generated when the generate command will be issued, but note that it won't still be active. In my case I will uncomment _\( ie: remove the # \)_ `en_US.UTF-8 UTF-8` and `it_IT.UTF-8 UTF-8` because I use English as a display language and Italian for date, time and other formats.  
 
 ```Zsh
-# To edit I will use vim, feel free to use nano instead.
-vim /etc/locale.gen
+# I used nano, if you want to use anything else nobody can stop you
+nano /etc/locale.gen
 
 # Now issue the generation of the locales
 locale-gen
@@ -300,7 +315,7 @@ Since the locale is generated but still not active, we will create the configura
 
 ```Zsh
 touch /etc/locale.conf
-vim /etc/locale.conf
+nano /etc/locale.conf
 ```
 
 <br>
@@ -308,7 +323,7 @@ vim /etc/locale.conf
 Now to make the current keyboard layout permanent for tty sessions , create `/etc/vconsole.conf` and write `KEYMAP=your_key_map` substituting the keymap with the one previously set [here](#preliminary-steps). In my case `KEYMAP=it`
 
 ```Zsh
-vim /etc/vconsole.conf
+nano /etc/vconsole.conf
 ```
 
 <br>
@@ -318,7 +333,7 @@ vim /etc/vconsole.conf
 ```Zsh
 # Create /etc/hostname then choose and write the name of your pc in the first line. In my case I'll use Arch
 touch /etc/hostname
-vim /etc/hostname
+nano /etc/hostname
 
 # Create the /etc/hosts file. This is very important because it will resolve the listed hostnames locally and not over Internet DNS.
 touch /etc/hosts
@@ -334,7 +349,7 @@ Write the following ip, hostname pairs inside /etc/hosts, replacing `Arch` with 
 
 ```Zsh
 # Edit the file with the information above
-vim /etc/hosts
+nano /etc/hosts
 ```
 
 <br>
@@ -348,8 +363,8 @@ passwd
 # Add a new user, in my case mjkstra.
 # -m creates the home dir automatically
 # -G adds the user to an initial list of groups, in this case wheel, the administration group. If you are on a Virtualbox VM and would like to enable shared folders between host and guest machine, then also add the group vboxsf besides wheel.
-useradd -mG wheel mjkstra
-passwd mjkstra
+useradd -mG wheel mbane04
+passwd mbane04
 
 # The command below is a one line command that will open the /etc/sudoers file with your favourite editor.
 # You can choose a different editor than vim by changing the EDITOR variable
@@ -358,7 +373,7 @@ passwd mjkstra
 # Why are we issuing this command instead of a simple vim /etc/sudoers ? 
 # Because visudo does more than opening the editor, for example it locks the file from being edited simultaneously and
 # runs syntax checks to avoid committing an unreadable file.
-EDITOR=vim visudo
+EDITOR=nano visudo
 ```
 
 <br>
@@ -419,23 +434,6 @@ sudo systemctl enable grub-btrfsd
 
 <br>
 
-## Virtualbox support  
-
-Follow these steps if you are running Arch on a Virtualbox VM.
-This will enable features such as **clipboard sharing**, **shared folders** and **screen resolution tweaks**
-
-```Zsh
-# Install the guest utils
-pacman -S virtualbox-guest-utils
-
-# Enable this service to automatically load the kernel modules
-systemctl enable vboxservice.service
-```
-
-> Note: the utils will only work after a reboot is performed.
-
-> Warning: the utils seems to only work in a graphical environment.
-
 <br>
 
 ## Aur helper and additional packages installation  
@@ -475,38 +473,6 @@ reboot
 
 In order to have the smoothest experience on a graphical environment, **Gaming included**, we first need to install video drivers. To help you choose which one you want or need, read [this section](https://wiki.archlinux.org/title/Xorg#Driver_installation) of the arch wiki.  
 
-> Note: skip this section if you are on a Virtual Machine
-
-<br>
-
-## Amd  
-
-For this guide I'll install the [**AMDGPU** driver](https://wiki.archlinux.org/title/AMDGPU) which is the open source one and the recommended, but be aware that this works starting from the **GCN 3** architecture, which means that cards **before** RX 400 series are not supported. _\( I have an RX 5700 XT \)_  
-
-```Zsh
-
-# What are we installing ?
-# mesa: DRI driver for 3D acceleration.
-# xf86-video-amdgpu: DDX driver for 2D acceleration in Xorg. I won't install this, because I prefer the default kernel modesetting driver.
-# vulkan-radeon: vulkan support.
-# libva-mesa-driver: VA-API h/w video decoding support.
-# mesa-vdpau: VDPAU h/w accelerated video decoding support.
-
-sudo pacman -S mesa vulkan-radeon libva-mesa-driver mesa-vdpau
-```
-
-### 32 Bit support
-
-If you want to add **32-bit** support, we need to enable the `multilib` repository on pacman: edit `/etc/pacman.conf` and uncomment the `[multilib]` section _\( ie: remove the hashtag from each line of the section. Should be 2 lines \)_. Now we can install the additional packages.
-
-```Zsh
-# Refresh and upgrade the system
-yay
-
-# Install 32bit support for mesa, vulkan, VA-API and VDPAU
-sudo pacman -S lib32-mesa lib32-vulkan-radeon lib32-libva-mesa-driver lib32-mesa-vdpau
-```
-
 <br>
 
 ## Nvidia  
@@ -518,17 +484,21 @@ In summary if you have an Nvidia card you have 2 options:
 
 The recommended is the proprietary one, however I won't explain further because I don't have an Nvidia card and the process for such cards is tricky unlike for AMD or Intel cards. Moreover for reason said before, I can't even test it.
 
-<br>
+In this github there is a hardware installation script for installing AMD and NVIDIA's proprietary drivers
 
-## Intel
-
-Installation looks almost identical to the AMD one, but every time a package contains the `radeon` word substitute it with `intel`. However this does not stand for [h/w accelerated decoding](https://wiki.archlinux.org/title/Hardware_video_acceleration), and to be fair I would recommend reading [the wiki](https://wiki.archlinux.org/title/Intel_graphics#Installation) before doing anything.
+```Zsh
+# Give the files permissions to execute
+chmod +x installHardwareDrivers.sh
+./installHardwareDrivers.sh
+```
 
 <br>
 
 # Setting up a graphical environment
 
-I'll provide 2 options:  
+I'll provide 2 options, I personally will start with KDE Plasma and build Hyprland over time until I am ready to use it as my daily driver:
+KDE Plasma is an excellent choice for a daily driver and is very customizable compared to GNOME
+But Hyprland seems to be the best if you really want to customize or "rice" your system
 
 1. **KDE-plasma**  
 2. **Hyprland**
@@ -572,6 +542,14 @@ On top of that I'll add a **display manager**, which you can omit if you don't l
 # spectacle: the KDE screenshot tool.
 # dragon: a simple KDE media player. A more advanced alternative based on libmpv is Haruna.
 sudo pacman -S plasma-desktop plasma-pa plasma-nm plasma-systemmonitor plasma-firewall plasma-browser-integration kscreen kwalletmanager kwallet-pam bluedevil powerdevil power-profiles-daemon kdeplasma-addons xdg-desktop-portal-kde xwaylandvideobridge kde-gtk-config breeze-gtk cups print-manager konsole dolphin ffmpegthumbs firefox kate okular gwenview ark pinta spectacle dragon
+
+#Alternatively feel free to run the script in this github
+#give the file permissions to run
+chmod +x installDesktopEnvironment.sh
+./installDesktopEnvironment.sh
+
+#if you  run the script above, its best to reboot afterwards, since we also installed SDDM, a display manager
+reboot
 ```
 
 Now don't reboot your system yet. If you want a display manager, which is generally recommended, head to the [related section](#adding-a-display-manager) in this guide and proceed from there otherwise you'll have to [manually configure](https://wiki.archlinux.org/title/KDE#From_the_console) and launch the graphical environment each time \(which I would advise to avoid\).
@@ -620,6 +598,26 @@ pacman -S --needed sddm-kcm
 # Now it's time to reboot the system
 reboot
 ```
+<br>
+
+# Installing Wine
+To install wine, you need to first enable the multilib repository
+
+To do this, open the pacman config file and uncomment these 2 lines:
+[multilib]
+Include = /etc/pacman.d/mirrorlist
+
+```Zsh
+Open the pacman config file:
+sudo nano /etc/pacman.conf
+
+# Uncomment the above lines
+
+# Install wine
+sudo pacman -Sy wine winetricks wine-gecko wine-mono
+```
+
+
 
 <br>
 
@@ -651,6 +649,10 @@ sudo pacman -S steam flatpak
 
 # Install bottles through flatpak
 flatpak install flathub com.usebottles.bottles
+
+#alternatively, you can run the installGamingSetup.sh script
+chmod +x installGamingSetup.sh
+./installGamingSetup.sh
 ```
 
 <br>
@@ -711,7 +713,7 @@ To overclock your system, i suggest installing [**corectrl**](https://gitlab.com
   - [Arch linux general recommendations](https://wiki.archlinux.org/title/General_recommendations)
 <br>
 
-# Things to add
+# Things to look in to
 
 1. Additional pacman configuration \( paccache, colors, download packages simultaneously \)
 2. Reflector configuration
