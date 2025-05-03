@@ -40,7 +40,9 @@
 
 # Introduction
 
-The goal of this guide is to help new users set up a modern and minimal installation of **Arch Linux** with **BTRFS** on an **UEFI system**. I'll start from the basic terminal installation and then set up **video drivers, a desktop environment and provide basic gaming configuration**. This guide is thought to be read alongside the wiki, so that it if something ever changes you can fix it but it's not necessary unless my guide becomes outdated. Also I will mention external references to justify some choices that I've made so that curious users can delve into the details.  
+The goal of this guide is to help myself and users with a similar setup succesfully set up and configure Arch Linux, along with getting a desktop environment set up. There will be slight variations to mine if your system is different, but for the most part you should be able to get Arch Setup off of this guide
+Well...... if anyone sees it but me lol
+Credit to  @mjkstra for this guide, he wrote most of it and I added more details that I thought necessary, and configured to my own personal setup and what i need
 
 ### Note that:
 
@@ -49,8 +51,6 @@ The goal of this guide is to help new users set up a modern and minimal installa
 - I **won't** encrypt the system because I don't need it and because encryption always adds a little bit of overhead in the boot phase leading to a **slower to varying degrees** start\-up, depending on your configuration. However it may be important for you so if you really wanna go this way I recommend reading [the wiki page in this regards](https://wiki.archlinux.org/title/Dm-crypt) and **must** perform the documented steps **IMMEDIATELY AFTER** [disk partitioning](#disk-partitioning). Also note that you must set the type of partition to a LUKS partition instead of a standard Linux partition when partitioning with `fdisk`.
 
 - I'll **skip** the Arch ISO installation media preparation.
-
-- I'll use a **wired** connection, so no wireless configuration steps will be shown. If you want to connect to wifi, you can either launch `wifi-menu` from the terminal which is a **TGUI** or use [`iwctl`](https://wiki.archlinux.org/title/Iwd#iwctl).
 
 <br>
 
@@ -91,10 +91,11 @@ ping -c 5 archlinux.org
 
 If not connected use these for wifi
 ```Zsh
+# launch iwctl
 iwctl
 
 # view available networks
-staton wlan0 get-networks
+station wlan0 get-networks
 
 # connect to a network
 station wlan0 connect NetworkName
