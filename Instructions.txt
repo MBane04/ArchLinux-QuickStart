@@ -1,0 +1,7 @@
+
+Open the pacman config file:
+sudo nano /etc/pacman.conf
+
+Uncomment these two lines:
+[multilib]
+Include = /etc/pacman.d/mirrorlist
