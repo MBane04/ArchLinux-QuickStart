@@ -40,5 +40,4 @@ sudo systemctl enable sddm
 # If using KDE I suggest installing this to control the SDDM configuration from the KDE settings App
 pacman -S --needed sddm-kcm
 
-# Now it's time to reboot the system
-reboot
+echo "Completed, a reboot is now recommended"
