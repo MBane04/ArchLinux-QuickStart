@@ -1,13 +1,15 @@
 #!/bin/bash
-# Arch Linux dependencies for SVT
+# Native Arch Linux dependencies for SVT
 
 echo "Installing system dependencies..."
-sudo pacman -Sy --needed \
-    glfw-x11 libx11 libxrandr libxinerama libxcursor libxi libxext libxfixes \
-    mesa libglvnd glu soil mesa-demos freeglut glfw-x11 cuda base-devel ffmpeg \
-    gedit
+sudo pacman -S --needed \
+    base-devel git \
+    glfw-x11 libx11 libxrandr libxinerama libxcursor libxi mesa glu \
+    nvidia nvidia-utils libva-vdpau-driver vulkan-icd-loader \  # NVIDIA-specific
+    cuda \                                                      # If using CUDA
+    ffmpeg 
 
-# Install NVIDIA CUDA Toolkit (if NVIDIA GPU)
-sudo pacman -S cuda nvidia-utils
+# Optional: Install these ONLY if your code uses them
+# sudo pacman -S freeglut soil   # Uncomment if needed
 
 echo "Dependencies installation completed!"
